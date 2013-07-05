@@ -29,6 +29,49 @@
 #ifndef __DEPSGRAPH_TYPES_H__
 #define __DEPSGRAPH_TYPES_H__
 
+/* ************************************* */
+/* Nodes in Depsgraph */
 
+/* Types of Nodes ---------------------- */
+
+typedef enum eDepsNode_Type {
+	/* Outer Types */
+	DEPSNODE_OUTER_TYPE_ID    = 0,        /* Datablock */
+	DEPSNODE_OUTER_TYPE_GROUP = 1,        /* ID Group */
+	DEPSNODE_OUTER_TYPE_OP    = 2,        /* Inter-datablock operation */
+	
+	/* Inner Types */
+	DEPSNODE_INNER_TYPE_ATOM  = 100,      /* Atomic Operation */
+	DEPSNODE_INNER_TYPE_COMBO = 101,      /* Optimised cluster of atomic operations - unexploded */
+} eDepsNode_Type;
+
+/* Base Node Type ---------------------- */
+
+/* All nodes are descended from this */
+struct DepsNode {
+	DepsNode *next, *prev;	/* "natural order" that nodes can live in */
+	DepsNode *parent;       /* node which "owns" this one */
+	
+	eDepsNode_Type type;    /* type of node */
+	
+	eDepsNode_Color color;  /* for internal algorithmic usage... */
+	short time;             /* for tracking whether node has been visited twice - cycle detection */
+	
+	short needs_update;     /* (bool) whether node is tagged for updating */
+};
+
+
+/* ************************************* */
+/* Depsgraph */
+
+/* Dependency Graph object */
+struct Depsgraph {
+	ListBase nodes;		/*([DepsNode]) sorted set of top-level outer-nodes */
+	
+	size_t num_nodes;   /* total number of nodes present in the system */
+	int type;           /* type of Depsgraph - generic or specialised... */
+};
+
+/* ************************************* */
 
 #endif // __DEPSGRAPH_TYPES_H__
