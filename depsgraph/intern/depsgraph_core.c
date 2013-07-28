@@ -483,7 +483,6 @@ Depsgraph *DEG_graph_new()
 /* Free graph's contents, but not graph itself */
 void DEG_graph_free(Depsgraph *graph)
 {
-	
 	/* free nodes, and everything else related to them will be freed too... */
 	
 }
