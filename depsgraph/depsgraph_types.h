@@ -369,6 +369,7 @@ struct Depsgraph {
 	
 	/* Quick-Access Temp Data ............. */
 	ListBase entry_tags;     /* (LinkData : DepsNode) nodes which have been tagged as "directly modified" */
+	size_t tagged_count;     /* number of nodes that have been tagged for updates/refresh - used for completion cross-checking */     
 	
 	// XXX: other data...
 	// XXX: what about free-floating non-id-related nodes? where do "they" go?
