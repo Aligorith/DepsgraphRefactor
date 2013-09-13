@@ -373,7 +373,6 @@ struct Depsgraph {
 	size_t tagged_count;     /* number of nodes that have been tagged for updates/refresh - used for completion cross-checking */     
 	
 	// XXX: other data...
-	// XXX: what about free-floating non-id-related nodes? where do "they" go?
 };
 
 /* ************************************* */
