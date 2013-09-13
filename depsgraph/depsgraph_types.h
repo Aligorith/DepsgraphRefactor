@@ -372,7 +372,11 @@ struct Depsgraph {
 	ListBase entry_tags;     /* (LinkData : DepsNode) nodes which have been tagged as "directly modified" */
 	size_t tagged_count;     /* number of nodes that have been tagged for updates/refresh - used for completion cross-checking */     
 	
-	// XXX: other data...
+	/* Convenience Data ................... */
+	ListBase all_opnodes;    /* (LinkData : DepsNode) all operation nodes, sorted in order of single-thread traversal order */
+	size_t num_nodes;        /* number of operation nodes in all_opnodes list */
+	
+	// XXX: additional stuff like eval contexts, mempools for allocating nodes from, etc.
 };
 
 /* ************************************* */
