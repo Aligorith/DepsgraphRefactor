@@ -29,29 +29,151 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "MEM_guardedalloc.h"
+
 #include "BLI_blenlib.h"
+#include "BLI_heap.h"
 #include "BLI_ghash.h"
 #include "BLI_utildefines.h"
 
-#include "MEM_guardedalloc.h"
-
+#include "depsgraph_types.h"
 #include "depsgraph_queue.h"
 
 /* ********************************************************* */
-// TODO: move these type defines to a separate header file
-
-/* Dependency Graph Traversal Queue 
- *
- * This actually consists of two queues - a "pending" queue
- * and a "ready" queue. Only nodes in the "ready" queue can
- * be retrieved and visited.
- */
-typedef struct DepsgraphQueue {
-	
-} DepsgraphQueue;
-
-/* ********************************************************* */
 /* Depsgraph Queue implementation */
+
+/* Data Management ----------------------------------------- */
+
+DepsgraphQueue *DEG_queue_new(void)
+{
+	DepsgraphQueue *q = MEM_callocN(sizeof(DepsgraphQueue), "DEG_queue_new()");
+	
+	/* init data structures for use here */
+	q->pending_heap = BLI_heap_new();
+	q->pending_hash = BLI_ghash_ptr_new("DEG Queue Pending Hash");
+	
+	q->ready_heap   = BLI_heap_new();
+	
+	/* init settings */
+	q->idx = 0;
+	q->tot = 0;
+	
+	/* return queue */
+	return q;
+}
+
+void DEG_queue_free(DepsgraphQueue *q)
+{
+	/* free data structures */
+	BLI_assert(BLI_heap_size(q->pending_heap) == 0);
+	BLI_assert(BLI_heap_size(q->ready_heap) == 0);
+	BLI_assert(BLI_ghash_size(q->pending_hash) == 0);
+	
+	BLI_heap_free(q->pending_heap, NULL);
+	BLI_heap_free(q->ready_heap, NULL);
+	BLI_ghash_free(q->pending_hash, NULL, NULL);
+	
+	/* free queue itself */
+	MEM_freeN(q);
+}
+
+/* Statistics --------------------------------------------- */
+
+/* Get the number of nodes which are we should visit, but are not able to yet */
+size_t DEG_queue_num_pending(DepsgraphQueue *q)
+{
+	return BLI_heap_size(q->pending_heap);
+}
+
+/* Get the number of nodes which are now ready to be visited */
+size_t DEG_queue_num_ready(DepsgraphQueue *q)
+{
+	return BLI_heap_size(q->ready_heap);
+}
+
+/* Get total size of queue */
+size_t DEG_queue_size(DepsgraphQueue *q)
+{
+	return DEG_queue_num_pending(q) + DEG_queue_num_ready(q);
+}
+
+/* Check if queue has any items in it (still passing through) */
+bool DEG_queue_is_empty(DepsgraphQueue *q)
+{
+	return DEG_queue_size(q) == 0;
+}
+
+/* Queue Operations --------------------------------------- */
+
+/* Add DepsNode to the queue 
+ * - Each node is only added once to the queue(s)
+ * - Valence counts get adjusted here, since this call is used
+ *   when the in-node has been visited, clearing the way for
+ *   its dependencies (i.e. the ones we're adding now)
+ */
+void DEG_queue_push(DepsgraphQueue *q, DepsNode *dnode)
+{
+	HeapNode *hnode = NULL;
+	int cost;
+	
+	/* adjust valence count of node */
+	// TODO: this should probably be done as an atomic op?
+	dnode->valency--;
+	cost = dnode->valency;
+	
+	/* Shortcut: Directly add to ready if node isn't waiting on anything now... */
+	if (cost == 0) {
+		/* node is now ready to be visited - schedule it up for such */
+		if (BLI_ghash_has_key(q->pending_hash, dnode)) {
+			/* remove from pending queue - we're moving it to the scheduling queue */
+			hnode = BLI_ghash_lookup(q->pending_hash, dnode);
+			BLI_heap_remove(q->pending_heap, hnode);
+			
+			BLI_ghash_remove(q->pending_hash, dnode, NULL, NULL);
+		}
+		
+		/* schedule up node using latest count (of ready nodes) */
+		BLI_heap_insert(q->ready_hash, (float)q->idx, dnode);
+		q->idx++;
+	}
+	else {
+		/* node is still waiting on some other ancestors, 
+		 * so add it to the pending heap in the meantime...
+		 */
+		// XXX: is this even necessary now?
+		if (BLI_ghash_has_key(q->pending_hash, dnode)) {
+			/* just update cost on pending node */
+			hnode = BLI_ghash_lookup(q->pending_hash, dnode);
+			BLI_heap_node_value_set(q->pending_heap, hnode, (float)cost);
+		}
+		else {
+			/* add new node to pending queue, and increase size of overall queue */
+			hnode = BLI_heap_insert(q->pending_heap, (float)cost, dnode);
+			q->tot++;
+		}
+	}
+}
+
+/* Grab a "ready" node from the queue */
+void *DEG_queue_pop(DepsgraphQueue *q)
+{
+	/* sanity check: if there are no "ready" nodes, 
+	 * start pulling from "pending" to keep things moving,
+	 * but throw a warning so that we know that something's up here...
+	 */
+	if (BLI_heap_is_empty(q->ready_heap)) {
+		// XXX: this should never happen
+		// XXX: if/when it does happen, we may want instead to just wait until something pops up here...
+		printf("DepsgraphHeap Warning: No more ready nodes available. Trying from pending (idx = %d, tot = %d, pending = %d, ready = %d)\n",
+		       q->idx, q->tot, DEG_queue_num_pending(q), DEG_queue_num_ready(q));
+		
+		return BLI_heap_popmin(q->pending_heap);
+	}
+	else {	
+		/* only grab "ready" nodes */
+		return BLI_heap_popmin(q->ready_heap);
+	}
+}
 
 /* ********************************************************* */
 
